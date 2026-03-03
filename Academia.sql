@@ -91,3 +91,45 @@ alter table poblacion add constraint fk_provincia_poblacion foreign key (id_prov
 alter table asignatura add constraint fk_persona_asignatura foreign key (dni_profesor) references persona(dni);
 
 
+/*
+ * Para evitar valores duplicados de tipo varchar en una tabla, sin importar mayúsculas y minúsculas,
+ * no sirve con una constraint de tipo unique. Hay que crear un índice (index) de tipo unique,
+ * porque nos permite hacer una comparación transformando la información:
+ */
+
+create unique index unique_provincia on provincia (lower(provincia)); 
+create unique index unique_asignatura on asignatura (lower(nombre));
+
+/*
+ * Lo que está pasando aquí es que convierte el contenido existente y el que se va a insertar 
+ * con INSERT INTO a minúsculas con lower. Por tanto, si tengo "Murcia" y quiero insertar "murCIA",
+ * convierte ambas a minúsculas primero y luego hace la comparación, quedando que "murcia" es igual a "murcia",
+ * violando la restricción e impidiendo el guardado 👍🏻
+ */
+
+/* 
+ * También podemos restringir valores en función a una expresión booleana, como si fuera un where:
+ */
+alter table calificacion add constraint check_calificacion check (calificacion between 0 and 10);
+
+/*
+ * Esto está comprobando que la columna calificación no pueda tener valores que NO estén entre 0 y 10.
+ * Una alternativa sería:
+ * 
+ * alter table calificacion add constraint check_calificacion check (calificacion >= 0 and calificacion <= 10);
+ * 
+ */
+
+/*
+ * También se pueden restrigir combinaciones de columnas con una constraint unique:
+ */
+
+alter table calificacion add constraint unique_calificacion_alumno_asignatura unique (dni_alumno, id_asignatura);
+
+
+/*
+ * Esto impide que pueda tener dos calificaciones para el mismo alumno en la misma asignatura, lo cual no tendría sentido.
+ * Si podría tener calificaciones para ese alumno en otras asignaturas o calificaciones de esa asignatura para otros alumnos.
+ */
+
+
