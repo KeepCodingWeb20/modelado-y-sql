@@ -124,12 +124,12 @@ alter table calificacion add constraint check_calificacion check (calificacion b
  * 
  */
 
+
 /*
  * También se pueden restrigir combinaciones de columnas con una constraint unique:
  */
 
 alter table calificacion add constraint unique_calificacion_alumno_asignatura unique (dni_alumno, id_asignatura);
-
 
 /*
  * Esto impide que pueda tener dos calificaciones para el mismo alumno en la misma asignatura, lo cual no tendría sentido.
@@ -2081,33 +2081,102 @@ INSERT INTO tmp_academia (nombre,apellido_1,apellido_2,dni,email,telefono,movil,
 	 ('Rosa maria','Hidalgo','Martin','4460151Z','rosa maria.hidalgo.martin@gmail.com',908473191,678721487,'2015-09-02','DevOps & Cloud Computing Full Stack','2023-10-23','Torresandino','Burgos','Dolores Ibárruri','50 2B','Plataformas Cloud y Kubernetes',10);
 
 
+/*
+ * Lo que hacemos a partir de aquí es insertar valores en las tablas que hemos creado
+ * 
+ * Primero, hacemos un select para saber los valores sin repetir y luego, los insertamos.
+ * 
+ */
+
+
+-- Carga de datos de personas sin repetir
 insert into persona (dni, nombre, apellidos, fecha_nacimiento, email, movil, telefono)
 select distinct ta.dni, ta.nombre, concat(ta.apellido_1, ' ', ta.apellido_2), ta.fecha_nacimiento::date, ta.email, ta.movil, ta.telefono from tmp_academia ta order by ta.dni;
 
 
+-- Carga de datos de provincias sin repetir. Al cargar la información, generará los IDs que tenemos que recuperar después
 insert into provincia (provincia)
 select distinct ta.provincia from tmp_academia ta order by ta.provincia;
 
-select distinct ta.poblacion, ta.provincia from tmp_academia ta order by ta.poblacion;
 
-
+-- Carga de datos de poblaciones sin repetir. Aquí tengo que obtener los IDs de provincia que se han creado en la carga anterior.
 insert into poblacion (poblacion, id_provincia)
 select distinct ta.poblacion, p.id from tmp_academia ta 
 inner join provincia p on ta.provincia = p.provincia
 order by p.id, ta.poblacion;
 
 
-select * from tmp_academia ta where (ta.fecha_matriculacion = '' or ta.fecha_matriculacion is null);
+
+-- Carga de datos postales. Aquí lo que hacemos es obtener los IDs de provincia y de población que se han generado gracias a los serials
+insert into datos_postales (dni, direccion, id_poblacion )
+select distinct ta.dni, concat(ta.calle, ', ', ta.piso),  po.id
+from tmp_academia ta
+inner join provincia p on ta.provincia = p.provincia
+inner join poblacion po on ta.poblacion = po.poblacion and p.id = po.id_provincia 
+order by ta.dni;
+
+/*
+ * Carga de datos de asignaturas. Aquí necesito sacar las asignaturas y los profesores, de modo que saco aquellos que no tienen fecha de matriculación.
+ * 
+ * Si no tienen fecha de matriculación es que son profesores, obviamente.
+ */
+insert into asignatura (dni_profesor, nombre)
+select distinct ta.dni, substring(ta.asignatura, 1, 30) from tmp_academia ta where (ta.fecha_matriculacion = '' or ta.fecha_matriculacion is null);
+
+
+-- Cargo los cursos.
+insert into curso(nombre)
+select distinct ta.curso from tmp_academia ta;
+
+-- Relaciono las asignaturas con los cursos. Tenemos asignatura_por_curso porque alguans asignaturas pueden pertenecer a más de un curso.
+insert into asignatura_por_curso (id_asignatura, id_curso)
+select distinct a.id,  c.id from tmp_academia ta
+inner join asignatura a on substring(ta.asignatura, 1, 30) = a.nombre
+inner join curso c on c.nombre = ta.curso;
+
+
+-- Saco las asignaturas que aparecen en más de un curso, agrupando por id_asignatura pero filtrando con having cuyo count(*) sea mayor que 1.
+select 
+	apc.id_asignatura
+from asignatura_por_curso apc 
+group by apc.id_asignatura 
+having count(*) > 1;
+
+
+-- Saco las asignaturas por curso, pero solo aquellas que aparecen en más de un curso, usando la consulta anterior como subconsulta para saber solo las que aparecen en más de un curso.
+select c.nombre curso, a.nombre asignatura from asignatura_por_curso apc
+inner join asignatura a on apc.id_asignatura = a.id
+inner join curso c on apc.id_curso = c.id
+inner join (
+	select 
+		apc.id_asignatura
+	from asignatura_por_curso apc 
+	group by apc.id_asignatura 
+	having count(*) > 1
+) asig_rep on asig_rep.id_asignatura = a.id
+order by a.nombre;
+
+
+-- Saco las calificaciones.
+insert into calificacion (dni_alumno, id_asignatura, calificacion)
+select ta.dni, a.id, ta.nota from tmp_academia ta 
+inner join asignatura a on a.nombre = substring(ta.asignatura, 1, 30)
+where ta.fecha_matriculacion != ''
+order by ta.dni;
+
+-- Saco los alumnos que han aprobado (tienen más de 5 de nota media)
+select c.dni_alumno, round(avg(c.calificacion), 1) nota_media 
+from calificacion c 
+group by c.dni_alumno 
+having avg(c.calificacion) >= 5;
 
 
 /*
-select 
-	ta.dni, ta.nombre, concat(ta.apellido_1, ' ', ta.apellido_2) apellidos, ta.fecha_nacimiento, ta.email, ta.movil, ta.telefono, max(ta.nota )
-from tmp_academia ta 
-group by
-	ta.dni, ta.nombre, ta.apellido_1, ta.apellido_2, ta.fecha_nacimiento, ta.email, ta.movil, ta.telefono 
-order by ta.dni;
-*/
-
-
+ * Sacamos solo las personas que son alumnos utilizando la tabla de asignaturas:
+ * 
+ * Uniendo con left join, vamos a sacar TODOS los registros de persona y solo aquellos de asignatura que coincidan (son profesores)
+ * 
+ * Como tengo todas las personas, se que son alumnos los que no están en asignatura (a.id is null). Así descarto los registros de profesores.
+ */
+select * from persona p left join asignatura a on p.dni = a.dni_profesor where a.id is null;
 
