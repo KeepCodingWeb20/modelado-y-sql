@@ -1,6 +1,7 @@
 -- Añado la instrucción de creación de schema.
 create schema if not exists academia;
 
+
 set schema 'academia';
 
 create table if not exists persona (
@@ -51,7 +52,7 @@ create table if not exists provincia (
 
 create table if not exists poblacion (
 	id serial primary key,
-	poblacion varchar(30) not null,
+	poblacion varchar(50) not null,
 	id_provincia smallint not null
 );
 
@@ -98,6 +99,9 @@ alter table asignatura add constraint fk_persona_asignatura foreign key (dni_pro
  */
 
 create unique index unique_provincia on provincia (lower(provincia)); 
+
+-- drop index unique_poblacion;
+create unique index unique_poblacion_provincia on poblacion (lower(poblacion), id_provincia); 
 create unique index unique_asignatura on asignatura (lower(nombre));
 
 /*
@@ -2076,6 +2080,34 @@ INSERT INTO tmp_academia (nombre,apellido_1,apellido_2,dni,email,telefono,movil,
 	 ('Rosa maria','Hidalgo','Martin','4460151Z','rosa maria.hidalgo.martin@gmail.com',908473191,678721487,'2015-09-02','DevOps & Cloud Computing Full Stack','2023-10-23','Torresandino','Burgos','Dolores Ibárruri','50 2B','Python',3),
 	 ('Rosa maria','Hidalgo','Martin','4460151Z','rosa maria.hidalgo.martin@gmail.com',908473191,678721487,'2015-09-02','DevOps & Cloud Computing Full Stack','2023-10-23','Torresandino','Burgos','Dolores Ibárruri','50 2B','Plataformas Cloud y Kubernetes',10);
 
+
+insert into persona (dni, nombre, apellidos, fecha_nacimiento, email, movil, telefono)
+select distinct ta.dni, ta.nombre, concat(ta.apellido_1, ' ', ta.apellido_2), ta.fecha_nacimiento::date, ta.email, ta.movil, ta.telefono from tmp_academia ta order by ta.dni;
+
+
+insert into provincia (provincia)
+select distinct ta.provincia from tmp_academia ta order by ta.provincia;
+
+select distinct ta.poblacion, ta.provincia from tmp_academia ta order by ta.poblacion;
+
+
+insert into poblacion (poblacion, id_provincia)
+select distinct ta.poblacion, p.id from tmp_academia ta 
+inner join provincia p on ta.provincia = p.provincia
+order by p.id, ta.poblacion;
+
+
+select * from tmp_academia ta where (ta.fecha_matriculacion = '' or ta.fecha_matriculacion is null);
+
+
+/*
+select 
+	ta.dni, ta.nombre, concat(ta.apellido_1, ' ', ta.apellido_2) apellidos, ta.fecha_nacimiento, ta.email, ta.movil, ta.telefono, max(ta.nota )
+from tmp_academia ta 
+group by
+	ta.dni, ta.nombre, ta.apellido_1, ta.apellido_2, ta.fecha_nacimiento, ta.email, ta.movil, ta.telefono 
+order by ta.dni;
+*/
 
 
 
